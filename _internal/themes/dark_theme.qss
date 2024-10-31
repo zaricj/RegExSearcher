@@ -1,0 +1,140 @@
+/* General Settings */
+QWidget {
+    background-color: #1e1e1e;
+    color: #d3d3d3;
+    font-family: "Segoe UI", "Roboto", sans-serif;
+    font-size: 10pt;
+}
+
+/* Line Edit */
+QLineEdit {
+    background-color: #2b2b2b;
+    color: #d3d3d3;
+    border: 1px solid #3a3a3a;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+QLineEdit:hover {
+    border-color: #3ddc84;
+}
+
+QLineEdit:focus {
+    border-color: #19db6f;
+}
+
+/* Push Button */
+QPushButton {
+    background-color: #19db6f;
+    color: #000000;
+    border: 1px solid #3a3a3a;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font: bold;
+}
+
+QPushButton:hover {
+    background-color: #3a3a3a;
+    color: #ffffff;
+}
+
+QPushButton:pressed {
+    background-color: #3ddc84;
+}
+
+QPushButton:disabled {
+    background-color: #5b5b5b;
+    color: #ffffff;
+}
+
+/* List Widget */
+QListWidget {
+    background-color: #2b2b2b;
+    color: #d3d3d3;
+    border: 1px solid #3a3a3a;
+    border-radius: 4px;
+    padding: 5px;
+}
+
+QListWidget::item {
+    padding: 5px;
+}
+
+QListWidget::item:selected {
+    background-color: #3ddc84;
+    color: #1e1e1e;
+}
+
+/* Label */
+QLabel {
+    color: #d3d3d3;
+    font-weight: normal;
+}
+
+/* File Dialog */
+QFileDialog {
+    background-color: #1e1e1e;
+    color: #d3d3d3;
+}
+
+/* Text Edit */
+QTextEdit {
+    background-color: #2b2b2b;
+    color: #d3d3d3;
+    border: 1px solid #3a3a3a;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+/* Menu */
+QMenu {
+    background-color: #1e1e1e;
+    color: #d3d3d3;
+    border: 1px solid #3a3a3a;
+}
+
+QMenu::item {
+    padding: 5px 20px;
+}
+
+QMenu::item:selected {
+    background-color: #3ddc84;
+    color: #1e1e1e;
+}
+
+/* Message Box */
+QMessageBox {
+    background-color: #1e1e1e;
+    color: #d3d3d3;
+}
+
+QMessageBox QPushButton {
+    background-color: #3a3a3a;
+    color: #d3d3d3;
+    border: 1px solid #3a3a3a;
+    padding: 6px 12px;
+    border-radius: 4px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #19db6f;
+    color: #1e1e1e;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #3ddc84;
+}
+
+/* Progress Bar */
+QProgressBar {
+    background-color: #2b2b2b;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    text-align: center;
+    color: #ffffff;
+    padding: 2px;
+}
+
+QProgressBar::chunk {
+    background-color: #19db6f;
+}
