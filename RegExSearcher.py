@@ -96,22 +96,27 @@ class Worker(QObject):
                 return
             
             try:
+
                 os.makedirs("CSVResults", exist_ok=True)
                 with open(f"CSVResults/regex_matches_{formatted_today_date}.csv", mode="w", newline="") as file:
                     writer = csv.writer(file)
                     writer.writerow(headers)
+                    for index, row in enumerate(csv_data, 1):
+                        self.progress.emit((index + 1) / len(csv_data) * 100)
                     writer.writerows(csv_data)
-
-                self.output_append.emit(f"Matches saved to regex_matches_{formatted_today_date}.csv")
+                        
+                self.output_append.emit(f"Matches saved to 'CSVResults\\regex_matches_{formatted_today_date}.csv'")
             except Exception as e:
                 self.output_set_text.emit(f"Error: {e}")
         except Exception as ex:
             self.output_set_text.emit(f"An exception occurred in method search_and_save: {str(ex)}")
         
         finally:
+            file.close()
             self.finished.emit()
 
 class RegExSearcher(QMainWindow):
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("RegEx Searcher")
@@ -135,6 +140,9 @@ class RegExSearcher(QMainWindow):
             file.close()
         except Exception as ex:
             QMessageBox.critical(self, "Theme load error", f"Failed to load theme: {str(ex)}")
+    
+    def update_progress(self, value):
+        self.progress_bar.setValue(value)
 
     # ====================================== Start Menu Bar Start ====================================== #
 
@@ -287,7 +295,6 @@ class RegExSearcher(QMainWindow):
         
     # ====================================== End Initialize UI End ====================================== #
     
-    
     def generate_regex(self):
         input_element = self.build_input.text()
         if len(input_element) > 0:
@@ -361,6 +368,7 @@ class RegExSearcher(QMainWindow):
         self.regex_worker.output_append.connect(self.output_window.append)
         self.regex_worker.finished.connect(self.regex_thread.quit)
         self.regex_worker.finished.connect(self.on_finished_search_and_save)
+        self.regex_worker.progress.connect(self.update_progress)
         
         # Update the UI buttons
         self.stop_search_button.setDisabled(False)
@@ -377,6 +385,7 @@ class RegExSearcher(QMainWindow):
     def on_finished_search_and_save(self):
         self.stop_search_button.setDisabled(True)
         self.search_button.setDisabled(False)
+        self.progress_bar.reset()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -16,17 +16,17 @@ QLineEdit {
 }
 
 QLineEdit:hover {
-    border-color: #3ddc84;
+    border-color: #3d65dc;
 }
 
 QLineEdit:focus {
-    border-color: #19db6f;
+    border-color: #1953db;
 }
 
 /* Push Button */
 QPushButton {
-    background-color: #19db6f;
-    color: #000000;
+    background-color: #1953db;
+    color: #ffffff;
     border: 1px solid #3a3a3a;
     padding: 6px 12px;
     border-radius: 4px;
@@ -34,12 +34,11 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background-color: #3a3a3a;
-    color: #ffffff;
+    background-color: #103791;
 }
 
 QPushButton:pressed {
-    background-color: #3ddc84;
+    background-color: #2b2b2b;
 }
 
 QPushButton:disabled {
@@ -61,7 +60,7 @@ QListWidget::item {
 }
 
 QListWidget::item:selected {
-    background-color: #3ddc84;
+    background-color: #3d65dc;
     color: #1e1e1e;
 }
 
@@ -98,7 +97,7 @@ QMenu::item {
 }
 
 QMenu::item:selected {
-    background-color: #3ddc84;
+    background-color: #3d65dc;
     color: #1e1e1e;
 }
 
@@ -117,12 +116,12 @@ QMessageBox QPushButton {
 }
 
 QMessageBox QPushButton:hover {
-    background-color: #19db6f;
+    background-color: #1953db;
     color: #1e1e1e;
 }
 
 QMessageBox QPushButton:pressed {
-    background-color: #3ddc84;
+    background-color: #3d65dc;
 }
 
 /* Progress Bar */
@@ -136,5 +135,5 @@ QProgressBar {
 }
 
 QProgressBar::chunk {
-    background-color: #19db6f;
+    background-color: #1953db;
 }
