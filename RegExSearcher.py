@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread
 from _internal.modules.regex_generator import RegexGenerator
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
-
+print(script_dir)
 
 class Worker(QObject):
     """
@@ -96,7 +96,6 @@ class Worker(QObject):
                 return
             
             try:
-
                 os.makedirs("CSVResults", exist_ok=True)
                 with open(f"CSVResults/regex_matches_{formatted_today_date}.csv", mode="w", newline="") as file:
                     writer = csv.writer(file)
@@ -119,9 +118,9 @@ class RegExSearcher(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("RegEx Searcher")
+        self.setWindowTitle("Lobster Log Searcher")
         self.setGeometry(100, 100, 1000, 600)
-        self.icon = QIcon("_internal/icon/geis.ico")
+        self.icon = QIcon("_internal/icon/lobster_logo.ico")
         self.setWindowIcon(self.icon)
         self.current_theme = os.path.join(script_dir, "_internal/themes/dark_theme.qss") # Sets the global main theme from the file
         self.init_ui()
@@ -165,13 +164,20 @@ class RegExSearcher(QMainWindow):
         clear_output_action = QAction("Clear Output", self)
         clear_output_action.triggered.connect(self.clear_output)
         file_menu.addAction(clear_output_action)
-
+        
         file_menu.addSeparator()
 
         exit_action = QAction("Exit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
+        # Open Menu
+        open_menu = menubar.addMenu("&Open")
+        
+        open_csv_folder = QAction("Open Output Folder", self)
+        open_csv_folder.triggered.connect(lambda: self.open_folder_helper_method(os.path.join(script_dir, "CSVResults")))
+        open_menu.addAction(open_csv_folder)
+        
         # Help menu
         help_menu = menubar.addMenu("&Help")
         how_to_use_action = QAction("How to Use", self)
@@ -261,8 +267,6 @@ class RegExSearcher(QMainWindow):
         refresh_theme_button.clicked.connect(self.refresh_theme)
 
         # Output window
-        group_label = QLabel("Program Output:")
-        group_label.setStyleSheet("font-size: 20;font-weight: bold")
         self.output_window = QTextEdit()
         self.output_window.setReadOnly(True)
         
@@ -280,7 +284,6 @@ class RegExSearcher(QMainWindow):
         left_layout.addWidget(self.stop_search_button)
         left_layout.addWidget(refresh_theme_button)
 
-        right_layout.addWidget(group_label)
         right_layout.addWidget(self.output_window)
         right_layout.addWidget(self.progress_bar)
 
@@ -302,7 +305,7 @@ class RegExSearcher(QMainWindow):
             self.pattern_input.setText(self.generator.get_regex())
             self.output_window.setText(f"Generated the following RegEx: '{self.generator.get_regex()}'.\n Press 'Add' to add it to the list")
         else:
-            QMessageBox.critical(self, "Input error", "No string has been entered in the input element.")
+            QMessageBox.warning(self, "Input warning", "No string has been entered in the input element.")
     
     def refresh_theme(self):
         try:
@@ -344,6 +347,16 @@ class RegExSearcher(QMainWindow):
 
     def clear_output(self):
         self.output_window.clear()
+        
+    def open_folder_helper_method(self, folder_path):
+        try:
+            if not os.path.isdir(folder_path) and os.path.exists(folder_path):
+                QMessageBox.critical(self,"Not a valid path",f"The entered folder path '{folder_path}' is not valid or does not exist.")
+            else:
+                os.startfile(folder_path)
+        except Exception as ex:
+            message = f"An exception of type {type(ex).__name__} occurred. Arguments: {ex.args!r}"
+            QMessageBox.critical(self, "Error", message)
 
     def set_pattern(self, pattern, header):
         self.pattern_input.setText(pattern)
