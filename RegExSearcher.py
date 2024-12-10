@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QLineEdit, QPushButton, QListWidget, QLabel, QFileDialog, 
                                QTextEdit, QMenuBar, QMenu, QFrame, QMessageBox, QProgressBar)
 from PySide6.QtGui import QAction, QIcon
-from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread
+from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread, QSettings
 from _internal.modules.regex_generator import RegexGenerator
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -120,7 +120,17 @@ class RegExSearcher(QMainWindow):
         super().__init__()
         self.setWindowTitle("Lobster Log Searcher")
         self.setGeometry(100, 100, 1000, 600)
+<<<<<<< Updated upstream
         self.icon = QIcon("_internal/icon/lobster_logo.ico")
+=======
+        
+        # Settings to save current location of the windows on exit
+        self.settings = QSettings("App","RegExSearcher")
+        geometry = self.settings.value("geometry", bytes())
+        self.restoreGeometry(geometry)
+        
+        self.icon = QIcon("_internal/icon/geis.ico")
+>>>>>>> Stashed changes
         self.setWindowIcon(self.icon)
         self.current_theme = os.path.join(script_dir, "_internal/themes/dark_theme.qss") # Sets the global main theme from the file
         self.init_ui()
@@ -295,6 +305,11 @@ class RegExSearcher(QMainWindow):
         # Set main widget layout
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
+        
+    def closeEvent(self, event):
+        geometry = self.saveGeometry()
+        self.settings.setValue("geometry", geometry)
+        super(RegExSearcher, self).closeEvent(event)
         
     # ====================================== End Initialize UI End ====================================== #
     
