@@ -1,6 +1,5 @@
 import re
 
-
 class RegexGenerator:
     def __init__(self, string_pattern_to_detect):
         self.string_pattern_to_detect = string_pattern_to_detect

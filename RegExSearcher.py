@@ -2,16 +2,57 @@ import os
 import re
 import csv
 import sys
+import json
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLineEdit, QPushButton, QListWidget, QLabel, QFileDialog, 
-                               QTextEdit, QMenuBar, QMenu, QFrame, QMessageBox, QProgressBar)
-from PySide6.QtGui import QAction, QIcon
-from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread
+                               QTextEdit, QMenuBar, QMenu, QFrame, QMessageBox, QProgressBar, QStatusBar)
+from PySide6.QtGui import QAction, QIcon, QCloseEvent
+from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread, QSettings
+from win32api import GetSystemMetrics
 from _internal.modules.regex_generator import RegexGenerator
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-print(script_dir)
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+class ConfigHandler:
+    def __init__(self):
+        self.config_file = os.path.join(SCRIPT_DIR, "_internal","config","program_config.json")
+        self.make_conf_dir_if_not_exist()
+        self.config = self.load_config()
+        
+    def make_conf_dir_if_not_exist(self):
+        if not os.path.exists(os.path.join(SCRIPT_DIR, "_internal", "config")):
+            os.makedirs(os.path.join(SCRIPT_DIR, "_internal","config"), exist_ok= True)
+
+    def load_config(self):
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, "r") as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                QMessageBox.warning(self, "Warning", f"Warning: {self.config_file} is empty or contains invalid JSON. Using default configuration.")
+                return self.get_default_config()
+
+    def get_default_config(self):
+        return {"default_key": {}, "default_key_other": {}}
+
+    def save_config(self):
+        with open(self.config_file, "w") as f:
+            json.dump(self.config, f, indent=4)
+    
+
+class SettingsWindow(QWidget):
+    """
+    This "Settings Window" is a QWidget. If it has no parent, it
+    will appear as a free-floating window as we want.
+    """
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout()
+        self.label = QLabel("Lobster Log Searcher - Settings")
+        layout.addWidget(self.label)
+        self.setLayout(layout)
+
 
 class Worker(QObject):
     """
@@ -115,19 +156,24 @@ class Worker(QObject):
             self.finished.emit()
 
 class RegExSearcher(QMainWindow):
-
     def __init__(self):
         super().__init__()
+        self.icon = QIcon("_internal/icon/lobster_logo.ico")
+        self.current_theme = os.path.join(SCRIPT_DIR, "_internal/themes/dark_theme.qss") # Sets the global main theme from the file
+        self.regex_thread = None
+        self.regex_worker = None
+        self.settings_window = SettingsWindow()
         self.setWindowTitle("Lobster Log Searcher")
         self.setGeometry(100, 100, 1000, 600)
-        self.icon = QIcon("_internal/icon/lobster_logo.ico")
         self.setWindowIcon(self.icon)
-        self.current_theme = os.path.join(script_dir, "_internal/themes/dark_theme.qss") # Sets the global main theme from the file
         self.init_ui()
         self.create_menu_bar()
         self.initialize_theme(self.current_theme)
-        self.regex_thread = None
-        self.regex_worker = None
+        
+        # Settings to save current location of the windows on exit
+        self.settings = QSettings("Application","Name")
+        geometry = self.settings.value("geometry", bytes())
+        self.restoreGeometry(geometry)
         
     def initialize_theme(self, theme_file):
         try:
@@ -147,7 +193,7 @@ class RegExSearcher(QMainWindow):
 
     def create_menu_bar(self):
         menubar = self.menuBar()
-
+        
         # File menu
         file_menu = menubar.addMenu("&File")
         
@@ -165,6 +211,10 @@ class RegExSearcher(QMainWindow):
         clear_output_action.triggered.connect(self.clear_output)
         file_menu.addAction(clear_output_action)
         
+        settings_action = QAction("Settings...", self)
+        settings_action.triggered.connect(self.open_settings)
+        file_menu.addAction(settings_action)
+        
         file_menu.addSeparator()
 
         exit_action = QAction("Exit", self)
@@ -174,8 +224,8 @@ class RegExSearcher(QMainWindow):
         # Open Menu
         open_menu = menubar.addMenu("&Open")
         
-        open_csv_folder = QAction("Open Output Folder", self)
-        open_csv_folder.triggered.connect(lambda: self.open_folder_helper_method(os.path.join(script_dir, "CSVResults")))
+        open_csv_folder = QAction("Open CSV Results Folder...", self)
+        open_csv_folder.triggered.connect(lambda: self.open_folder_helper_method(os.path.join(SCRIPT_DIR, "CSVResults")))
         open_menu.addAction(open_csv_folder)
         
         # Help menu
@@ -191,19 +241,19 @@ class RegExSearcher(QMainWindow):
         expressions_menu.addAction(time_pattern_action)
 
         job_number_action = QAction("Job Number Pattern", self)
-        job_number_action.triggered.connect(lambda: self.set_pattern(r"Job:\s+((?:\d+|GENERAL))", "Job Number"))
+        job_number_action.triggered.connect(lambda: self.set_pattern(r"Job:\s+((?:\d+|GENERAL))", "Job number"))
         expressions_menu.addAction(job_number_action)
 
         profilename_action = QAction("Profilename Pattern", self)
-        profilename_action.triggered.connect(lambda: self.set_pattern(r"\[(.*?)]", "Profilename"))
+        profilename_action.triggered.connect(lambda: self.set_pattern(r"\[(.*?)]", "Profile name"))
         expressions_menu.addAction(profilename_action)
 
         filename_action = QAction("Filename Pattern", self)
-        filename_action.triggered.connect(lambda: self.set_pattern(r"Start processing data of file '(.*?)'", "Filename"))
+        filename_action.triggered.connect(lambda: self.set_pattern(r"Start processing data of file '(.*?)'", "filename"))
         expressions_menu.addAction(filename_action)
 
         filesize_action = QAction("Filesize Pattern", self)
-        filesize_action.triggered.connect(lambda: self.set_pattern(r"length=(\d+),", "Filesize in Bytes"))
+        filesize_action.triggered.connect(lambda: self.set_pattern(r"length=(\d+),", "Filesize in bytes"))
         expressions_menu.addAction(filesize_action)
 
     # ====================================== End Menu Bar End ====================================== #
@@ -256,13 +306,29 @@ class RegExSearcher(QMainWindow):
 
         # Headers input
         self.headers_input = QLineEdit()
+        self.headers_input.setClearButtonEnabled(True)
 
+        # Statusbar layout
+        statusbar_layout = QHBoxLayout()
+        
         # Search button
         self.search_button = QPushButton("Search and Save to CSV")
         self.search_button.clicked.connect(self.start_regex_and_save)
         self.stop_search_button = QPushButton("Abort Task")
         self.stop_search_button.setDisabled(True)
+        self.stop_search_button.setHidden(True)
         self.stop_search_button.clicked.connect(self.stop_search_and_save)
+        # CSV results output path statusbar
+        self.csv_results_statusbar = QStatusBar()
+        self.csv_results_statusbar.setSizeGripEnabled(False)
+        self.csv_results_statusbar.showMessage(os.path.join(SCRIPT_DIR, "CSVResults"))
+        self.csv_results_statusbar.setStyleSheet("font-size: 12px; color: #ffffff;")
+        self.open_button = QPushButton("Open")
+        self.open_button.clicked.connect(lambda: self.open_folder_helper_method(os.path.join(SCRIPT_DIR, "CSVResults")))
+        # Add it to the statusbar layout
+        statusbar_layout.addWidget(self.csv_results_statusbar)
+        statusbar_layout.addWidget(self.open_button)
+        
         refresh_theme_button = QPushButton("Refresh Theme")
         refresh_theme_button.clicked.connect(self.refresh_theme)
 
@@ -283,6 +349,7 @@ class RegExSearcher(QMainWindow):
         left_layout.addWidget(self.search_button)
         left_layout.addWidget(self.stop_search_button)
         left_layout.addWidget(refresh_theme_button)
+        left_layout.addLayout(statusbar_layout)
 
         right_layout.addWidget(self.output_window)
         right_layout.addWidget(self.progress_bar)
@@ -298,12 +365,17 @@ class RegExSearcher(QMainWindow):
         
     # ====================================== End Initialize UI End ====================================== #
     
+    def closeEvent(self, event: QCloseEvent):
+        geometry = self.saveGeometry()
+        self.settings.setValue("geometry", geometry)
+        super(RegExSearcher, self).closeEvent(event)
+    
     def generate_regex(self):
         input_element = self.build_input.text()
         if len(input_element) > 0:
             self.generator = RegexGenerator(self.build_input.text())
             self.pattern_input.setText(self.generator.get_regex())
-            self.output_window.setText(f"Generated the following RegEx: '{self.generator.get_regex()}'.\n Press 'Add' to add it to the list")
+            self.output_window.setText(f"Generated the following RegEx: '{self.generator.get_regex()}'.\nPress 'Add' to add it to the list")
         else:
             QMessageBox.warning(self, "Input warning", "No string has been entered in the input element.")
     
@@ -314,7 +386,7 @@ class RegExSearcher(QMainWindow):
             self.output_window.setText(f"An exception occurred: {str(ex)}")
 
     def browse_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Select Log File", "", "Log Files (*.log)")
+        file_path, _ = QFileDialog.getOpenFileName(self, "Select Log File", "", "Log File (*.log)")
         if file_path:
             self.file_input.setText(file_path)
 
@@ -365,6 +437,14 @@ class RegExSearcher(QMainWindow):
             self.headers_input.setText(f"{current_headers},{header}")
         else:
             self.headers_input.setText(header)
+        self.add_pattern()
+    
+    def open_settings(self):
+        width, height = GetSystemMetrics(0) / 2, GetSystemMetrics(1) / 2
+        self.settings_window.setWindowTitle("Lobster Log Searcher - Settings")
+        self.settings_window.setWindowIcon(self.icon)
+        self.settings_window.setGeometry(width , height, 800, 400 )
+        self.settings_window.show()
             
 
     # ======================== RegExSearch and Save Methods ======================== #
@@ -372,7 +452,6 @@ class RegExSearcher(QMainWindow):
     def start_regex_and_save(self):
         self.regex_thread = QThread()
         self.regex_worker = Worker(self.file_input, self.headers_input, self.pattern_list, self.output_window)
-        
         self.regex_worker.moveToThread(self.regex_thread)
         
         # Connect Signals
@@ -385,6 +464,7 @@ class RegExSearcher(QMainWindow):
         
         # Update the UI buttons
         self.stop_search_button.setDisabled(False)
+        self.stop_search_button.setHidden(False)
         self.search_button.setDisabled(True)
         
         # Start the Thread
@@ -397,6 +477,7 @@ class RegExSearcher(QMainWindow):
             
     def on_finished_search_and_save(self):
         self.stop_search_button.setDisabled(True)
+        self.stop_search_button.setHidden(True)
         self.search_button.setDisabled(False)
         self.progress_bar.reset()
 
