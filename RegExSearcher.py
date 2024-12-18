@@ -363,6 +363,11 @@ class RegExSearcher(QMainWindow):
         main_widget.setLayout(main_layout)
         self.setCentralWidget(main_widget)
         
+    def closeEvent(self, event):
+        geometry = self.saveGeometry()
+        self.settings.setValue("geometry", geometry)
+        super(RegExSearcher, self).closeEvent(event)
+        
     # ====================================== End Initialize UI End ====================================== #
     
     def closeEvent(self, event: QCloseEvent):
