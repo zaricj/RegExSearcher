@@ -6,23 +6,24 @@ import json
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
                                QLineEdit, QPushButton, QListWidget, QLabel, QFileDialog, 
-                               QTextEdit, QMenuBar, QMenu, QFrame, QMessageBox, QProgressBar, QStatusBar)
+                               QTextEdit, QMenuBar, QMenu, QFrame, QMessageBox, QProgressBar, QStatusBar, QComboBox, QDialog)
 from PySide6.QtGui import QAction, QIcon, QCloseEvent
 from PySide6.QtCore import Qt, QFile, QTextStream, QObject, Signal, QThread, QSettings
 from win32api import GetSystemMetrics
 from _internal.modules.regex_generator import RegexGenerator
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+print(SCRIPT_DIR)
 
 class ConfigHandler:
     def __init__(self):
-        self.config_file = os.path.join(SCRIPT_DIR, "_internal","config","program_config.json")
+        self.config_file = os.path.join(SCRIPT_DIR, "_internal","configuration","program_config.json")
         self.make_conf_dir_if_not_exist()
         self.config = self.load_config()
         
     def make_conf_dir_if_not_exist(self):
-        if not os.path.exists(os.path.join(SCRIPT_DIR, "_internal", "config")):
-            os.makedirs(os.path.join(SCRIPT_DIR, "_internal","config"), exist_ok= True)
+        if not os.path.exists(os.path.join(SCRIPT_DIR, "_internal", "configuration")):
+            os.makedirs(os.path.join(SCRIPT_DIR, "_internal","configuration"), exist_ok=True)
 
     def load_config(self):
         if os.path.exists(self.config_file):
@@ -39,21 +40,7 @@ class ConfigHandler:
     def save_config(self):
         with open(self.config_file, "w") as f:
             json.dump(self.config, f, indent=4)
-    
-
-class SettingsWindow(QWidget):
-    """
-    This "Settings Window" is a QWidget. If it has no parent, it
-    will appear as a free-floating window as we want.
-    """
-    def __init__(self):
-        super().__init__()
-        layout = QVBoxLayout()
-        self.label = QLabel("Lobster Log Searcher - Settings")
-        layout.addWidget(self.label)
-        self.setLayout(layout)
-
-
+            
 class Worker(QObject):
     """
     Worker class that will run in a separate thread.
@@ -85,7 +72,7 @@ class Worker(QObject):
         try:
             self.search_and_save()
         except Exception as e:
-            self.output_append.emit(f"Critical error in worker thread: {str(e)}")
+            self.output_append.emit(f"Exception in worker thread: {str(e)}")
         finally:
             self.finished.emit()
         
@@ -155,25 +142,88 @@ class Worker(QObject):
             file.close()
             self.finished.emit()
 
+class SettingsWindow(QDialog):
+    """
+    This "Settings Window" is a QDialog. If it has no parent, it
+    will appear as a free-floating window as we want.
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent = parent  # Store reference to parent window
+        self.current_theme = os.path.join(SCRIPT_DIR, "_internal", "themes", "dark_theme.qss")
+        self.initialize_theme(self.current_theme)
+        
+        main_layout = QVBoxLayout()
+        hor_layout_theme = QHBoxLayout()
+        
+        # Standalone Widgets
+        self.save_and_close_button = QPushButton("Save and Close")
+        
+        # Widgets for the theme settings
+        self.apply_theme_button = QPushButton("Apply Theme")
+        self.apply_theme_button.clicked.connect(self.apply_theme)
+        self.theme_combobox = QComboBox()
+        self.theme_combobox.addItems(["Dark", "Light"])
+        
+        # Add theme widgets to the layout
+        hor_layout_theme.addWidget(QLabel("Change Theme:"))
+        hor_layout_theme.addWidget(self.theme_combobox)
+        hor_layout_theme.addWidget(self.apply_theme_button)
+        
+        main_layout.addLayout(hor_layout_theme)
+        main_layout.addWidget(self.save_and_close_button)
+        self.setLayout(main_layout)
+    
+    def apply_theme(self):
+        selected_theme = self.theme_combobox.currentText()
+        theme_file = os.path.join(
+            SCRIPT_DIR, 
+            "_internal",
+            "themes",
+            "dark_theme.qss" if selected_theme == "Dark" else "light_theme.qss"
+        )
+        
+        # Apply theme to both windows
+        if self.parent:
+            self.parent.initialize_theme(theme_file)
+        self.initialize_theme(theme_file)
+    
+    def initialize_theme(self, theme_file):
+        try:
+            file = QFile(theme_file)
+            if file.open(QFile.ReadOnly | QFile.Text):
+                stream = QTextStream(file)
+                stylesheet = stream.readAll()
+                self.setStyleSheet(stylesheet)
+            file.close()
+        except Exception as ex:
+            QMessageBox.critical(self, "Theme load error", f"Failed to load theme: {str(ex)}")
+
 class RegExSearcher(QMainWindow):
     def __init__(self):
         super().__init__()
         self.icon = QIcon("_internal/icon/lobster_logo.ico")
-        self.current_theme = os.path.join(SCRIPT_DIR, "_internal/themes/dark_theme.qss") # Sets the global main theme from the file
+        self.current_theme = os.path.join(SCRIPT_DIR, "_internal", "themes", "dark_theme.qss")  # Sets the global main theme from the file
         self.regex_thread = None
         self.regex_worker = None
-        self.settings_window = SettingsWindow()
+        
+        # Initialize UI first
         self.setWindowTitle("Lobster Log Searcher")
         self.setGeometry(100, 100, 1000, 600)
         self.setWindowIcon(self.icon)
         self.init_ui()
-        self.create_menu_bar()
+        
+        # Create settings window after UI initialization
+        self.settings_window = SettingsWindow(parent=self)  # Pass self as parent
+        
+        # Initialize theme last
         self.initialize_theme(self.current_theme)
         
         # Settings to save current location of the windows on exit
-        self.settings = QSettings("Application","Name")
+        self.settings = QSettings("Application", "Name")
         geometry = self.settings.value("geometry", bytes())
         self.restoreGeometry(geometry)
+        self.create_menu_bar()
         
     def initialize_theme(self, theme_file):
         try:
@@ -369,11 +419,6 @@ class RegExSearcher(QMainWindow):
         super(RegExSearcher, self).closeEvent(event)
         
     # ====================================== End Initialize UI End ====================================== #
-    
-    def closeEvent(self, event: QCloseEvent):
-        geometry = self.saveGeometry()
-        self.settings.setValue("geometry", geometry)
-        super(RegExSearcher, self).closeEvent(event)
     
     def generate_regex(self):
         input_element = self.build_input.text()

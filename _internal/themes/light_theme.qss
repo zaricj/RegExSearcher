@@ -1,16 +1,16 @@
 /* General Settings */
 QWidget {
-    background-color: #1a1a1a;
-    color: #e6e6e6;
+    background-color: #ffffff;
+    color: #333333;
     font-family: "Segoe UI", "Roboto", sans-serif;
     font-size: 10pt;
 }
 
 /* Line Edit */
 QLineEdit {
-    background-color: #262626;
-    color: #e6e6e6;
-    border: 1px solid #333333;
+    background-color: #f5f5f5;
+    color: #333333;
+    border: 1px solid #cccccc;
     padding: 5px;
     border-radius: 4px;
 }
@@ -26,7 +26,7 @@ QLineEdit:focus {
 /* Push Button */
 QPushButton {
     background-color: #FFD700; /* Geis yellow */
-    color: #1a1a1a;
+    color: #333333;
     border: 1px solid #FFD700;
     padding: 6px 12px;
     border-radius: 4px;
@@ -36,23 +36,25 @@ QPushButton {
 QPushButton:hover {
     background-color: #FF0000; /* Geis red */
     border-color: #FF0000;
+    color: #ffffff;
 }
 
 QPushButton:pressed {
     background-color: #CC0000; /* Darker red */
+    color: #ffffff;
 }
 
 QPushButton:disabled {
-    background-color: #4d4d4d;
-    color: #999999;
-    border-color: #4d4d4d;
+    background-color: #cccccc;
+    color: #666666;
+    border-color: #cccccc;
 }
 
 /* List Widget */
 QListWidget {
-    background-color: #262626;
-    color: #e6e6e6;
-    border: 1px solid #333333;
+    background-color: #f5f5f5;
+    color: #333333;
+    border: 1px solid #cccccc;
     border-radius: 4px;
     padding: 5px;
 }
@@ -64,36 +66,69 @@ QListWidget::item {
 
 QListWidget::item:selected {
     background-color: #FFD700; /* Geis yellow */
-    color: #1a1a1a;
+    color: #333333;
     border-radius: 4px;
+}
+
+/* Combo Box */
+QComboBox {
+    background-color: #f5f5f5;
+    color: #333333;
+    border: 1px solid #cccccc;
+    padding: 5px;
+    border-radius: 4px;
+    min-width: 120px;
+}
+
+QComboBox:hover {
+    border-color: #FFD700; /* Geis yellow */
+}
+
+QComboBox:focus {
+    border-color: #FF0000; /* Geis red */
+}
+
+QComboBox QAbstractItemView {
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 5px;
+}
+
+QComboBox QAbstractItemView::item:selected {
+    background-color: #FFD700; /* Geis yellow */
+    color: #333333;
 }
 
 /* Label */
 QLabel {
-    color: #e6e6e6;
+    color: #333333;
     font-weight: normal;
 }
 
 /* File Dialog */
 QFileDialog {
-    background-color: #1a1a1a;
-    color: #e6e6e6;
+    background-color: #ffffff;
+    color: #333333;
 }
 
 /* Text Edit */
 QTextEdit {
-    background-color: #262626;
-    color: #e6e6e6;
-    border: 1px solid #333333;
+    background-color: #f5f5f5;
+    color: #333333;
+    border: 1px solid #cccccc;
     padding: 5px;
     border-radius: 4px;
 }
 
 /* Menu */
 QMenu {
-    background-color: #1a1a1a;
-    color: #e6e6e6;
-    border: 1px solid #333333;
+    background-color: #ffffff;
+    color: #333333;
+    border: 1px solid #cccccc;
 }
 
 QMenu::item {
@@ -102,18 +137,18 @@ QMenu::item {
 
 QMenu::item:selected {
     background-color: #FFD700; /* Geis yellow */
-    color: #1a1a1a;
+    color: #333333;
 }
 
 /* Message Box */
 QMessageBox {
-    background-color: #1a1a1a;
-    color: #e6e6e6;
+    background-color: #ffffff;
+    color: #333333;
 }
 
 QMessageBox QPushButton {
     background-color: #FFD700; /* Geis yellow */
-    color: #1a1a1a;
+    color: #333333;
     border: 1px solid #FFD700;
     padding: 6px 12px;
     border-radius: 4px;
@@ -122,19 +157,21 @@ QMessageBox QPushButton {
 QMessageBox QPushButton:hover {
     background-color: #FF0000; /* Geis red */
     border-color: #FF0000;
+    color: #ffffff;
 }
 
 QMessageBox QPushButton:pressed {
     background-color: #CC0000; /* Darker red */
+    color: #ffffff;
 }
 
 /* Progress Bar */
 QProgressBar {
-    background-color: #262626;
-    border: 1px solid #333333;
+    background-color: #f5f5f5;
+    border: 1px solid #cccccc;
     border-radius: 6px;
     text-align: center;
-    color: #ffffff;
+    color: #333333;
     padding: 2px;
 }
 
