@@ -93,6 +93,23 @@ QPushButton#export_to_excel:pressed {
     background-color: #21754b;
 }
 
+QPushButton#export_to_excel_summary {
+    background-color: #21a366;
+    color: #000000;
+    border: none;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font: bold;
+}
+
+QPushButton#export_to_excel_summary:hover {
+    background-color: #228b58;
+}
+
+QPushButton#export_to_excel_summary:pressed {
+    background-color: #21754b;
+}
+
 QLineEdit, QComboBox, QTextEdit {
     background-color: #313338;
     border: 1px solid #4a4a4a;
@@ -243,11 +260,6 @@ QCheckBox::indicator:unchecked {
     border: 1px solid #4a4a4a;
 }
 """
-
-import os
-import re
-import csv
-from PySide6.QtCore import QThread, Signal
 
 class LogSearcherWorker(QThread):
     output_window = Signal(str)
@@ -683,6 +695,7 @@ class LogSearcherGUI(QMainWindow):
 
             # Excel export button
             export_button = QPushButton("Export to Excel")
+            export_button.setObjectName("export_to_excel_summary")
             export_button.setToolTip("Save the statistics as an Excel file")
 
             # Excel export function
