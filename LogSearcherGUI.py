@@ -25,6 +25,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Constants
 STYLESHEET_THEME = """
 QWidget {
@@ -271,7 +273,7 @@ class GenericWorker(QThread):
     messagebox_crit = Signal(str, str)
     output_window_clear = Signal()
 
-    def __init__(self, task, *args, **kwargs):
+    def __init__(self, task:str, *args, **kwargs):
         super().__init__()
         self.task = task  # A string to identify the task: "export_excel" or "search_logs"
         self.args = args  # Arguments for the task
@@ -294,7 +296,7 @@ class GenericWorker(QThread):
             raise ValueError(f"Unknown task: {self.task}")
 
 
-    def export_csv_to_excel(self, csv_file_path, excel_file_path):
+    def export_csv_to_excel(self, csv_file_path:str, excel_file_path:str) -> None:
             if not csv_file_path:
                 self.messagebox_warn.emit(
                     "No CSV File", "Please select a CSV file to convert."
@@ -338,7 +340,7 @@ class GenericWorker(QThread):
                 )
 
 
-    def process_file(self, filepath, file_index, total_files):
+    def process_file(self, filepath:str, file_index:int, total_files:int) -> None:
         if self._is_cancelled:
             return
 
@@ -375,7 +377,7 @@ class GenericWorker(QThread):
         self.output_window.emit(">>> Finished processing log file.")
 
 
-    def extract_and_write_to_csv(self, filepath, output_file_csv):
+    def extract_and_write_to_csv(self, filepath:str, output_file_csv:str) -> None:
         if os.path.isfile(filepath):
             files = [filepath]
         elif os.path.isdir(filepath):
@@ -425,8 +427,8 @@ class GenericWorker(QThread):
             self.output_window.emit("Operation cancelled by user.")
 
 
-    # Add helper methods here (e.g., count_lines, extract_info_from_line) if they are used by multiple tasks
-    def count_lines(self, filepath):
+    # Helper methods
+    def count_lines(self, filepath:str) -> int:
         count = 0
         with open(filepath, "r", encoding="utf-8", errors="ignore") as file:
             for _ in file:
@@ -434,7 +436,7 @@ class GenericWorker(QThread):
         return count
 
 
-    def extract_info_from_line(self, line):
+    def extract_info_from_line(self, line:str) -> list:
         time_pattern = r"\b(\d{2}:\d{2}:\d{2})\b"
         job_number_pattern = r"Job:\s+((?:\d+|GENERAL))"
         profilename_pattern = r"\[(.*?)]"
@@ -470,9 +472,8 @@ class StatisticsWindow(QMainWindow):
         super().__init__()
         self.csv_path = csv_path
         self.setWindowTitle(f"Statistics for {os.path.basename(csv_path)}")
-        self.setWindowIcon(
-            QIcon(os.path.join(os.getcwd(), "_internal", "icon", "wood.ico"))
-        )
+        self.setWindowIcon(QIcon(os.path.join(SCRIPT_DIR, "_internal", "icon", "wood.ico")))
+        
         self.resize(800, 600)
         self.setStyleSheet(STYLESHEET_THEME)
         self.statistics_dataframes = {}  # To store dataframes for export
@@ -544,7 +545,7 @@ class StatisticsWindow(QMainWindow):
             export_button = QPushButton("Export to Excel")
             export_button.setObjectName("export_to_excel_summary")
             export_button.setToolTip("Save the statistics as an Excel file")
-            export_button.clicked.connect(self.export_excel)
+            export_button.clicked.connect(self.export_statistic_to_excel)
             summary_layout.addWidget(export_button)
 
             self.central_widget.addTab(summary_tab, "Summary")
@@ -628,7 +629,7 @@ class StatisticsWindow(QMainWindow):
             self.central_widget.addTab(filetype_tab, "File Types")
 
 
-    def export_excel(self):
+    def export_statistic_to_excel(self):
         try:
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
@@ -657,9 +658,7 @@ class LogSearcherGUI(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Lobster Message Log Searcher v1.0")
-        self.setWindowIcon(
-            QIcon(os.path.join(os.getcwd(), "_internal", "icon", "wood.ico"))
-        )
+        self.setWindowIcon(QIcon(os.path.join(SCRIPT_DIR, "_internal", "icon", "wood.ico")))
         # Initialize settings for window geometry
         self.settings = QSettings(
             "Application", "Name"
@@ -779,7 +778,7 @@ class LogSearcherGUI(QMainWindow):
         self.layout.addWidget(summary_group)
     
     
-    def summarize_filesize(self):
+    def summarize_filesize(self) -> None:
             # Clear output
             self.summary_output_text.setText("Calculating Total Filesize in Bytes... please wait.")
             self.progress_bar.setValue(0)
@@ -817,7 +816,7 @@ class LogSearcherGUI(QMainWindow):
                 self.summary_output_text.append(f"Error processing CSV: {str(e)}")
                 
                 
-    def show_statistics_window(self):
+    def show_statistics_window(self) -> None:
         csv_path = self.csv_sum_filepath_input.text()
         if not csv_path:
             self.program_output_window.setText(
@@ -827,7 +826,7 @@ class LogSearcherGUI(QMainWindow):
         self.statistics_window = StatisticsWindow(csv_path)
         
         
-    def apply_stylesheet(self):
+    def apply_stylesheet(self) -> None:
         self.setStyleSheet(STYLESHEET_THEME)
 
 
@@ -903,7 +902,7 @@ class LogSearcherGUI(QMainWindow):
             self.csv_result_input.setText(file)
 
 
-    def browse_csv_sum(self):
+    def browse_csv_sum(self) -> None:
         file, _ = QFileDialog.getOpenFileName(
             self, "Open CSV File", "", "CSV Files (*.csv)"
         )
@@ -931,7 +930,7 @@ class LogSearcherGUI(QMainWindow):
             self.program_output_window.append("Excel export cancelled by user.")
 
     # Worker Thread for exporting CSV files to Excel - To combat GUI freezes
-    def start_export_to_excel(self, csv_file_path: str, excel_file_path: str) -> None:
+    def start_export_to_excel(self, csv_file_path:str, excel_file_path:str) -> None:
         if csv_file_path:
             self.worker = GenericWorker("export_excel",csv_file_path, excel_file_path)
             self.worker.output_window.connect(self.write_to_output_window)
@@ -945,7 +944,7 @@ class LogSearcherGUI(QMainWindow):
             
 
     #  Main method to search log files and write data to csv file
-    def start_processing(self):
+    def start_processing(self) -> None:
         log_filepath = self.log_filepath_input.text().strip()
         output_csv = self.csv_result_input.text()
 
@@ -976,12 +975,12 @@ class LogSearcherGUI(QMainWindow):
                     "No log files found in the selected folder."
                 )
 
-    def open_logs_folder(self, path):
+    def open_logs_folder(self, path:str) -> None:
         self.log_filepath_input.setText(path)
         self.add_recent_folder(path)
         self.print_total_log_files(path)
 
-    def add_recent_folder(self, folder):
+    def add_recent_folder(self, folder:str) -> None:
         if folder not in self.recent_folders:
             self.recent_folders.insert(0, folder)
             if len(self.recent_folders) > 5:
@@ -993,12 +992,12 @@ class LogSearcherGUI(QMainWindow):
                 action.triggered.connect(lambda checked, p=f: self.open_logs_folder(p))
                 self.recent_menu.addAction(action)
 
-    def clear_output(self):
+    def clear_output(self) -> None:
         self.program_output_window.clear()
         self.summary_output_text.clear()
         self.progress_bar.setValue(0)
 
-    def show_about(self):
+    def show_about(self) -> None:
         about_text = """
 Lobster Message Log Searcher
 Version 1.0
@@ -1014,7 +1013,7 @@ Features:
         self.program_output_window.append(about_text)
 
     # Clear the recent folders from QSettings and the "Recent Menu" Menubar
-    def clear_recent_folders(self):
+    def clear_recent_folders(self) -> None:
         # Remove the 'recent_folders' key from QSettings
         self.settings.remove("recent_folders")
 
@@ -1025,7 +1024,7 @@ Features:
         self.recent_menu.clear()
 
     # Program close event trigger
-    def closeEvent(self, event: QCloseEvent):
+    def closeEvent(self, event: QCloseEvent) -> None:
         # Save geometry on close
         geometry = self.saveGeometry()
         self.settings.setValue("app_geometry", geometry)
@@ -1034,7 +1033,7 @@ Features:
         super(LogSearcherGUI, self).closeEvent(event)
 
     # Prints the total log files found in the statusbar
-    def print_total_log_files(self, filepath):
+    def print_total_log_files(self, filepath:str) -> None:
         try:
             if os.path.isfile(filepath):
                 files = [filepath]
