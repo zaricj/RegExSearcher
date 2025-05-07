@@ -260,134 +260,83 @@ QCheckBox::indicator:unchecked {
 }
 """
 
-
-class ExportToExcelWorker(QThread):
-    output_window = Signal(str)
-    output_window_clear = Signal()
-    messagebox_warn = Signal(str, str)
-    messagebox_info = Signal(str, str)
-    messagebox_crit = Signal(str, str)
-
-    def __init__(self, csv_file_path, excel_file_path):
-        super().__init__()
-        self.csv_file_path = csv_file_path
-        self.excel_file_path = excel_file_path  # Receive the chosen Excel file path
-
-    def run(self):
-        self.export_csv_to_excel(
-            self.csv_file_path, self.excel_file_path
-        )  # Pass both paths
-
-    def export_csv_to_excel(self, csv_file_path, excel_file_path):
-        if not csv_file_path:
-            self.messagebox_warn.emit(
-                "No CSV File", "Please select a CSV file to convert."
-            )
-            return
-        else:
-            self.output_window.emit("Exporting CSV to Excel... please wait.")
-
-        try:
-            with open(csv_file_path, encoding="utf-8") as file:
-                sample = file.read(4096)
-                sniffer = csv.Sniffer()
-                get_delimiter = sniffer.sniff(sample).delimiter
-                csv_df = pd.read_csv(
-                    csv_file_path,
-                    delimiter=get_delimiter,
-                    encoding="utf-8",
-                    index_col=0,
-                )
-
-            CONVERSION_FUNCTIONS = {
-                # CSV Conversion
-                ("csv", "xlsx"): (csv_df, pd.DataFrame.to_excel),
-            }
-            input_ext = os.path.splitext(csv_file_path)[1].lower().strip(".")
-            output_ext = os.path.splitext(excel_file_path)[1].lower().strip(".")
-
-            read_func, write_func = CONVERSION_FUNCTIONS.get(
-                (input_ext, output_ext), (None, None)
-            )
-
-            if read_func is None or write_func is None:
-                self.messagebox_warn.emit(
-                    "Unsupported Conversion",
-                    "Error converting file, unsupported conversion...",
-                )
-                return
-
-            csv_df = read_func
-            write_func(
-                csv_df, excel_file_path, index=False
-            )  # Ensure index=False for Excel
-            self.messagebox_info.emit(
-                "Successful conversion",
-                f"Successfully converted {csv_file_path} to {excel_file_path}",
-            )
-            self.output_window_clear.emit()
-        except Exception as ex:
-            message = f"An exception of type {type(ex).__name__} occurred. Arguments: {ex.args!r}"
-            self.messagebox_crit.emit(
-                "Exception exporting CSV", f"Error exporting CSV: {message}"
-            )
-
-
-class LogSearcherWorker(QThread):
+class GenericWorker(QThread):
     output_window = Signal(str)
     status = Signal(str)
     finished = Signal(str)
     progress_value = Signal(int)
     cancel_requested = Signal()
+    messagebox_warn = Signal(str, str)
+    messagebox_info = Signal(str, str)
+    messagebox_crit = Signal(str, str)
+    output_window_clear = Signal()
 
-    def __init__(self, filepath, output_file_csv):
+    def __init__(self, task, *args, **kwargs):
         super().__init__()
-        self.filepath = filepath
-        self.output_file_csv = output_file_csv
+        self.task = task  # A string to identify the task: "export_excel" or "search_logs"
+        self.args = args  # Arguments for the task
+        self.kwargs = kwargs # Keyword arguments for the task
         self._is_cancelled = False
         self.cancel_requested.connect(self.cancel)
+
 
     def cancel(self):
         self._is_cancelled = True
 
+
     def run(self):
-        self.extract_and_write_to_csv(self.filepath, self.output_file_csv)
+        if self.task == "export_excel":
+            self.export_csv_to_excel(*self.args, **self.kwargs)
+        elif self.task == "write_log_data_to_csv":
+            self.extract_and_write_to_csv(*self.args, **self.kwargs)
+        # Add more tasks as needed
+        else:
+            raise ValueError(f"Unknown task: {self.task}")
 
-    def extract_info_from_line(self, line):
-        time_pattern = r"\b(\d{2}:\d{2}:\d{2})\b"
-        job_number_pattern = r"Job:\s+((?:\d+|GENERAL))"
-        profilename_pattern = r"\[(.*?)]"
-        filename_pattern = r"Start processing data of file '(.*?)'"
-        filesize_pattern = r"length=(\d+),"
 
-        time_match = re.search(time_pattern, line)
-        job_number_match = re.search(job_number_pattern, line)
-        profilename_match = re.search(profilename_pattern, line)
-        filename_match = re.search(filename_pattern, line)
-        filesize_match = re.search(filesize_pattern, line)
+    def export_csv_to_excel(self, csv_file_path, excel_file_path):
+            if not csv_file_path:
+                self.messagebox_warn.emit(
+                    "No CSV File", "Please select a CSV file to convert."
+                )
+                return
+            else:
+                self.output_window.emit("Exporting CSV to Excel... please wait.")
+    
+            try:
+                with open(csv_file_path, encoding="utf-8") as file:
+                    sample = file.read(2048)
+                    sniffer = csv.Sniffer()
+                    get_delimiter = sniffer.sniff(sample).delimiter
+                    
+                csv_df = pd.read_csv(
+                    csv_file_path,
+                    delimiter=get_delimiter,
+                    encoding="utf-8",
+                    engine="pyarrow",
+                    index_col=0,
+                )
+                csv_row_count = csv_df.shape[0]
+                
+                if csv_row_count < 1048576:
+                    # Export to Excel
+                    with pd.ExcelWriter(excel_file_path, engine="xlsxwriter") as writer:
+                        csv_df.to_excel(writer, sheet_name="Statistics Data", index=False)
+    
+                    self.messagebox_info.emit(
+                        "Successful conversion",
+                        f"Successfully converted:\n{csv_file_path}\nto\n{excel_file_path}",
+                    )
+                else:
+                    self.messagebox_warn.emit("Too many rows", f"The CSV file exceeds the maximum row limit 1048576 for Excel. Your file contains {csv_row_count} rows.\nFile conversion not possible.")
+                self.output_window_clear.emit()
+    
+            except Exception as ex:
+                message = f"An exception of type {type(ex).__name__} occurred. Arguments: {ex.args!r}"
+                self.messagebox_crit.emit(
+                    "Exception exporting CSV", f"Error exporting CSV: {message}"
+                )
 
-        if (
-            time_match
-            and job_number_match
-            and profilename_match
-            and filename_match
-            and filesize_match
-        ):
-            return [
-                time_match.group(1),
-                job_number_match.group(1),
-                profilename_match.group(1),
-                filename_match.group(1),
-                filesize_match.group(1),
-            ]
-        return None
-
-    def count_lines(self, filepath):
-        count = 0
-        with open(filepath, "r", encoding="utf-8", errors="ignore") as file:
-            for _ in file:
-                count += 1
-        return count
 
     def process_file(self, filepath, file_index, total_files):
         if self._is_cancelled:
@@ -424,6 +373,7 @@ class LogSearcherWorker(QThread):
                     )
 
         self.output_window.emit(">>> Finished processing log file.")
+
 
     def extract_and_write_to_csv(self, filepath, output_file_csv):
         if os.path.isfile(filepath):
@@ -475,7 +425,235 @@ class LogSearcherWorker(QThread):
             self.output_window.emit("Operation cancelled by user.")
 
 
+    # Add helper methods here (e.g., count_lines, extract_info_from_line) if they are used by multiple tasks
+    def count_lines(self, filepath):
+        count = 0
+        with open(filepath, "r", encoding="utf-8", errors="ignore") as file:
+            for _ in file:
+                count += 1
+        return count
+
+
+    def extract_info_from_line(self, line):
+        time_pattern = r"\b(\d{2}:\d{2}:\d{2})\b"
+        job_number_pattern = r"Job:\s+((?:\d+|GENERAL))"
+        profilename_pattern = r"\[(.*?)]"
+        filename_pattern = r"Start processing data of file '(.*?)'"
+        filesize_pattern = r"length=(\d+),"
+
+        time_match = re.search(time_pattern, line)
+        job_number_match = re.search(job_number_pattern, line)
+        profilename_match = re.search(profilename_pattern, line)
+        filename_match = re.search(filename_pattern, line)
+        filesize_match = re.search(filesize_pattern, line)
+
+        if (
+            time_match
+            and job_number_match
+            and profilename_match
+            and filename_match
+            and filesize_match
+        ):
+            return [
+                time_match.group(1),
+                job_number_match.group(1),
+                profilename_match.group(1),
+                filename_match.group(1),
+                filesize_match.group(1),
+            ]
+        return None
+
+
+class StatisticsWindow(QMainWindow):
+    
+    def __init__(self, csv_path):
+        super().__init__()
+        self.csv_path = csv_path
+        self.setWindowTitle(f"Statistics for {os.path.basename(csv_path)}")
+        self.setWindowIcon(
+            QIcon(os.path.join(os.getcwd(), "_internal", "icon", "wood.ico"))
+        )
+        self.resize(800, 600)
+        self.setStyleSheet(STYLESHEET_THEME)
+        self.statistics_dataframes = {}  # To store dataframes for export
+
+        self.central_widget = QTabWidget()
+        self.setCentralWidget(self.central_widget)
+
+        self.create_summary_tab()
+        # self.create_profile_size_analysis_tab() # 07.05.2025 commented out
+        # self.create_filetype_analysis_tab() # 07.05.2025 commented out
+
+        self.show()
+
+
+    def closeEvent(self, event):
+        self.central_widget.deleteLater()  # Clean up the tab widget
+        self.deleteLater()  # Clean up the stats window
+        event.accept()  # Accept the close event
+
+
+    def create_summary_tab(self):
+        summary_tab = QWidget()
+        summary_layout = QVBoxLayout(summary_tab)
+        summary_text = QTextEdit()
+        summary_text.setReadOnly(True)
+
+        try:
+            usecols = ["Filename", "Filesize in Bytes", "Profile Name"]
+            df = pd.read_csv(self.csv_path, usecols=usecols, engine="pyarrow")
+
+            size_stats = df["Filesize in Bytes"].agg(["sum", "mean", "max", "min", "median", "std"])
+            total_files = df["Filename"].nunique()
+            total_entries = len(df)
+            total_size = size_stats["sum"]
+            avg_size = size_stats["mean"]
+            max_size = size_stats["max"]
+            min_size = size_stats["min"]
+            median_size = size_stats["median"]
+            std_dev_size = size_stats["std"]
+            files_by_profile = df["Profile Name"].value_counts()
+            top_10_largest = df.nlargest(10, "Filesize in Bytes")[["Filename", "Filesize in Bytes"]]
+            top_10_smallest = df.nsmallest(10, "Filesize in Bytes")[["Filename", "Filesize in Bytes"]]
+
+            summary_text.append("<h2>Summary Statistics</h2>")
+            summary_text.append(f"<ul><li><b>Einzigartige Dateien insgesamt:</b> {total_files}</li>")
+            summary_text.append(f"<li><b>Gesamte Log-Einträge:</b> {total_entries}</li>")
+            summary_text.append(f"<li><b>Gesamtgröße:</b> {int(total_size)} bytes ({total_size / 1024 / 1024:.2f} MB)</li>")
+            summary_text.append(f"<li><b>Durchschnittliche Dateigröße:</b> {int(avg_size)} bytes ({avg_size / 1024:.2f} KB)</li>")
+            summary_text.append(f"<li><b>Größte Datei:</b> {int(max_size)} bytes ({max_size / 1024 / 1024:.2f} MB)</li>")
+            summary_text.append(f"<li><b>Kleinste Datei:</b> {int(min_size)} bytes ({min_size / 1024:.2f} KB)</li></ul><br>")
+            summary_text.append("<h2>Additional Statistics</h2>")
+            summary_text.append(f"<ul><li><b>Mittlere Dateigröße:</b> {median_size:,} bytes ({median_size / 1024:.2f} KB)</li>")
+            summary_text.append(f"<li><b>Standardabweichung der Dateigrößen:</b> {std_dev_size:,} bytes ({std_dev_size / 1024:.2f} KB)</li></ul><br>")
+            summary_text.append("<h2>Top 10 Largest Files:</h2><br>")
+            for _, row in top_10_largest.iterrows():
+                summary_text.append(f"<p>{row['Filename']}: {row['Filesize in Bytes']:,} bytes</p>")
+            summary_text.append("<br><h2>Top 10 Smallest Files:</h2><br>")
+            for _, row in top_10_smallest.iterrows():
+                summary_text.append(f"<p>{row['Filename']}: {row['Filesize in Bytes']:,} bytes</p>")
+            summary_text.append("<br><h2>Files by Profile Name (First 100 Profiles):</h2><br>")
+            for index, (profile, count) in enumerate(files_by_profile.items(), 1):
+                if index <= 100:
+                    summary_text.append(f"<p>{profile}: {count} files</p>")
+                else:
+                    break
+
+            summary_layout.addWidget(summary_text)
+
+            export_button = QPushButton("Export to Excel")
+            export_button.setObjectName("export_to_excel_summary")
+            export_button.setToolTip("Save the statistics as an Excel file")
+            export_button.clicked.connect(self.export_excel)
+            summary_layout.addWidget(export_button)
+
+            self.central_widget.addTab(summary_tab, "Summary")
+
+        except Exception as e:
+            summary_text.append(f"Error calculating summary statistics: {str(e)}")
+            summary_layout.addWidget(summary_text)
+            self.central_widget.addTab(summary_tab, "Summary")
+
+
+    def create_profile_size_analysis_tab(self):
+        profile_size_tab = QWidget()
+        profile_size_layout = QVBoxLayout(profile_size_tab)
+        profile_size_text = QTextEdit()
+        profile_size_text.setReadOnly(True)
+
+        try:
+            df = pd.read_csv(self.csv_path, usecols=["Filename", "Filesize in Bytes", "Profile Name"], engine="pyarrow")
+
+            profile_size_summary = (
+                df.groupby("Profile Name")
+                .agg(
+                    {
+                        "Filesize in Bytes": ["mean", "std", "min", "max", "count"],
+                        "Filename": lambda x: list(dict.fromkeys(filter(None, x)))[:5],
+                    }
+                )
+                .reset_index()
+            )
+            profile_size_summary.columns = [
+                "Profile Name",
+                "Avg File Size (Bytes)",
+                "Std File Size (Bytes)",
+                "Min File Size (Bytes)",
+                "Max File Size (Bytes)",
+                "Count",
+                "Filenames",
+            ]
+            profile_size_summary["Avg File Size (Bytes)"] = profile_size_summary["Avg File Size (Bytes)"].round(2)
+            profile_size_summary["Std File Size (Bytes)"] = profile_size_summary["Std File Size (Bytes)"].round(2)
+            profile_size_summary["Filenames"] = profile_size_summary["Filenames"].apply(lambda x: ", ".join(x) if x else "None")
+
+            profile_size_text.append("<h2>Profile File Size Analysis</h2><br>")
+            profile_size_text.append(profile_size_summary.to_html(index=False))
+            profile_size_layout.addWidget(profile_size_text)
+            self.central_widget.addTab(profile_size_tab, "Profile File Size")
+
+            # Store for export
+            profile_size_export_df = profile_size_summary.copy()
+            self.statistics_dataframes["Per Profile Statistics"] = profile_size_export_df
+
+        except Exception as e:
+            profile_size_text.append(f"Error calculating profile size analysis: {str(e)}")
+            profile_size_layout.addWidget(profile_size_text)
+            self.central_widget.addTab(profile_size_tab, "Profile File Size")
+
+
+    def create_filetype_analysis_tab(self):
+        filetype_tab = QWidget()
+        filetype_layout = QVBoxLayout(filetype_tab)
+        filetype_text = QTextEdit()
+        filetype_text.setReadOnly(True)
+
+        try:
+            df = pd.read_csv(self.csv_path, usecols=["Filename"], engine="pyarrow")
+            df["Filetype"] = df["Filename"].str.extract(r'\.([^.]+)$').fillna("unknown")
+            filetypes_df = df["Filetype"].value_counts().head(20).reset_index()
+            filetypes_df.columns = ["Filetype", "File Count"]
+
+            filetype_text.append("<h2>Top 20 File Types</h2><br>")
+            filetype_text.append(filetypes_df.to_html(index=False))
+            filetype_layout.addWidget(filetype_text)
+            self.central_widget.addTab(filetype_tab, "File Types")
+
+            # Store for export
+            self.statistics_dataframes["Top Filetypes"] = filetypes_df
+
+        except Exception as e:
+            filetype_text.append(f"Error analyzing file types: {str(e)}")
+            filetype_layout.addWidget(filetype_text)
+            self.central_widget.addTab(filetype_tab, "File Types")
+
+
+    def export_excel(self):
+        try:
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Save Excel File",
+                f"{os.path.basename(self.csv_path).split('.')[0]}_statistics_{datetime.datetime.now().strftime('%Y-%m-%d')}.xlsx",
+                "Excel Files (*.xlsx)",
+            )
+            if not file_path:
+                return  # User canceled
+
+            with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
+                for sheet_name, df_export in self.statistics_dataframes.items():
+                    df_export.to_excel(writer, sheet_name=sheet_name, index=False)
+
+            QMessageBox.information(
+                self,
+                "Export Successful",
+                f"Exported to:\n{file_path}",
+            )
+        except Exception as e:
+            QMessageBox.critical(self, "Export Failed", str(e))
+
+
 class LogSearcherGUI(QMainWindow):
+    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Lobster Message Log Searcher v1.0")
@@ -499,6 +677,7 @@ class LogSearcherGUI(QMainWindow):
 
         self.setup_ui()
         self.apply_stylesheet()
+
 
     def setup_ui(self):
         self.setup_menubar()
@@ -584,11 +763,7 @@ class LogSearcherGUI(QMainWindow):
         self.summarize_button.clicked.connect(self.summarize_filesize)
         self.show_more_statistics = QPushButton("Show More Statistics")
         self.show_more_statistics.setHidden(True)  # Initially hidden
-        self.show_more_statistics.clicked.connect(
-            lambda: self.create_statistics_visualization(
-                self.csv_sum_filepath_input.text()
-            )
-        )
+        self.show_more_statistics.clicked.connect(self.show_statistics_window)
         self.csv_sum_layout.addWidget(self.csv_sum_filepath_input)
         self.csv_sum_layout.addWidget(self.csv_sum_filepath_button)
         self.csv_sum_layout.addWidget(self.summarize_button)
@@ -602,9 +777,59 @@ class LogSearcherGUI(QMainWindow):
         summary_layout.addWidget(self.show_more_statistics)
 
         self.layout.addWidget(summary_group)
+    
+    
+    def summarize_filesize(self):
+            # Clear output
+            self.summary_output_text.setText("Calculating Total Filesize in Bytes... please wait.")
+            self.progress_bar.setValue(0)
+            csv_result_path = self.csv_sum_filepath_input.text()
+            try:
+                df = pd.read_csv(csv_result_path)
+                total_filesize = df["Filesize in Bytes"].sum()
 
+                kb = total_filesize / 1024
+                mb = kb / 1024
+                gb = mb / 1024
+
+                summary = (
+                    f"Total Filesize of all processed files:\n"
+                    f"In Bytes = {total_filesize:,}\n"
+                    f"In KB = {kb:,.2f}\n"
+                    f"In MB = {mb:,.2f}\n"
+                    f"In GB = {gb:,.2f}"
+                )
+
+                self.summary_output_text.clear()
+                self.summary_output_text.append(summary)
+
+                # Preview first few rows
+                # preview = df.head().to_string(index=False)
+                # self.summary_output_text.append("\nCSV Preview (First 5 Rows):\n" + preview)
+
+                self.show_more_statistics.setHidden(
+                    False
+                )  # Show the button after summarization
+
+            except FileNotFoundError:
+                self.summary_output_text.append("No such file or directory.")
+            except Exception as e:
+                self.summary_output_text.append(f"Error processing CSV: {str(e)}")
+                
+                
+    def show_statistics_window(self):
+        csv_path = self.csv_sum_filepath_input.text()
+        if not csv_path:
+            self.program_output_window.setText(
+                "No CSV file to open and show additional statistics."
+            )
+            return
+        self.statistics_window = StatisticsWindow(csv_path)
+        
+        
     def apply_stylesheet(self):
         self.setStyleSheet(STYLESHEET_THEME)
+
 
     def setup_menubar(self):
         menubar = self.menuBar()
@@ -640,12 +865,12 @@ class LogSearcherGUI(QMainWindow):
         file_menu.addAction(exit_action)
 
         presets_menu = menubar.addMenu("&Presets")
-        open_test_logs = QAction("Lobster TEST Logs Folder", self)
+        open_test_logs = QAction("//nesist02/hub/logs/DataWizard", self)
         open_test_logs.triggered.connect(
             lambda: self.open_logs_folder("//nesist02/hub/logs/DataWizard")
         )
         presets_menu.addAction(open_test_logs)
-        open_prod_logs = QAction("Lobster PROD Logs Folder", self)
+        open_prod_logs = QAction("//nesis002/hub/logs/DataWizard", self)
         open_prod_logs.triggered.connect(
             lambda: self.open_logs_folder("//nesis002/hub/logs/DataWizard")
         )
@@ -656,12 +881,14 @@ class LogSearcherGUI(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
+
     def browse_log_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Log Folder")
         if folder:
             self.log_filepath_input.setText(folder)
             self.add_recent_folder(folder)
             self.print_total_log_files(folder)
+
 
     def browse_csv_save(self):
         placeholder_text = (
@@ -674,6 +901,7 @@ class LogSearcherGUI(QMainWindow):
         )
         if file:
             self.csv_result_input.setText(file)
+
 
     def browse_csv_sum(self):
         file, _ = QFileDialog.getOpenFileName(
@@ -705,348 +933,18 @@ class LogSearcherGUI(QMainWindow):
     # Worker Thread for exporting CSV files to Excel - To combat GUI freezes
     def start_export_to_excel(self, csv_file_path: str, excel_file_path: str) -> None:
         if csv_file_path:
-            self.worker_export_to_excel = ExportToExcelWorker(
-                csv_file_path, excel_file_path
-            )
-            self.worker_export_to_excel.output_window.connect(self.update_output)
-            self.worker_export_to_excel.messagebox_info.connect(
-                self.messagebox_popup_info
-            )
-            self.worker_export_to_excel.messagebox_warn.connect(
-                self.messagebox_popup_warn
-            )
-            self.worker_export_to_excel.messagebox_crit.connect(
-                self.messagebox_popup_crit
-            )
-            self.worker_export_to_excel.output_window_clear.connect(
-                self.clear_output_window
-            )
-            self.worker_export_to_excel.start()
+            self.worker = GenericWorker("export_excel",csv_file_path, excel_file_path)
+            self.worker.output_window.connect(self.write_to_output_window)
+            self.worker.messagebox_info.connect(self.messagebox_popup_info)
+            self.worker.messagebox_warn.connect(self.messagebox_popup_warn)
+            self.worker.messagebox_crit.connect(self.messagebox_popup_crit)
+            self.worker.output_window_clear.connect(self.clear_output_window)
+            self.worker.start()
         else:
             self.program_output_window.append("Please select a CSV file to export.")
             
-    # ====== Slots for the Signals of the Worker Thread "ExportToExcel" ====== #
-    
-    def update_output(self, message):
-        self.program_output_window.append(message)
 
-    def messagebox_popup_info(self, title, message):
-        QMessageBox.information(self, title, message)
-
-    def messagebox_popup_warn(self, title, message):
-        QMessageBox.warning(self, title, message)
-
-    def messagebox_popup_crit(self, title, message):
-        QMessageBox.critical(self, title, message)
-
-    def clear_output_window(self):
-        self.program_output_window.clear()
-        
-    # ====== END Slots for the Signals of the Worker Thread "ExportToExcel END ====== #
-    
-    def create_statistics_visualization(self, csv_path):
-        try:
-            if not csv_path:
-                self.program_output_window.setText(
-                    "No CSV file to open and show additional statistics."
-                )
-                return
-            df = pd.read_csv(csv_path)
-
-            # Create a tab widget for different visualizations
-            self.stats_tab = QTabWidget()
-            self.stats_window = QMainWindow()
-            self.stats_window.setWindowTitle(
-                f"Statistics for {os.path.basename(csv_path)}"
-            )
-            self.stats_window.setWindowIcon(
-                QIcon(os.path.join(os.getcwd(), "_internal", "icon", "wood.ico"))
-            )
-            self.stats_window.setCentralWidget(self.stats_tab)
-            self.stats_window.resize(800, 600)
-            self.stats_window.setStyleSheet(STYLESHEET_THEME)
-
-            # Override the closeEvent to clean up resources
-            def stats_window_close_event(event):
-                self.stats_tab.deleteLater()  # Clean up the tab widget
-                self.stats_window.deleteLater()  # Clean up the stats window
-                event.accept()  # Accept the close event
-
-            self.stats_window.closeEvent = stats_window_close_event
-
-            # Add a summary tab with text statistics
-            summary_tab = QWidget()
-            summary_layout = QVBoxLayout(summary_tab)
-            summary_text = QTextEdit()
-            summary_text.setReadOnly(True)
-
-            # New tab for Profile File Size Analysis
-            profile_size_tab = QWidget()
-            profile_size_layout = QVBoxLayout(profile_size_tab)
-            profile_size_text = QTextEdit()
-            profile_size_text.setReadOnly(True)
-
-            # Calculate statistics
-            total_files = df["Filename"].nunique()
-            total_entries = len(df)
-            total_size = df["Filesize in Bytes"].sum()
-            avg_size = df["Filesize in Bytes"].mean()
-            max_size = df["Filesize in Bytes"].max()
-            min_size = df["Filesize in Bytes"].min()
-
-            # Additional statistics
-            median_size = df["Filesize in Bytes"].median()
-            std_dev_size = df["Filesize in Bytes"].std()
-
-            # Group by Profile Name and Job Number
-            files_by_profile = df["Profile Name"].value_counts()
-
-            # Top 10 Largest and Smallest Files
-            top_10_largest = df.nlargest(10, "Filesize in Bytes")[
-                ["Filename", "Filesize in Bytes"]
-            ]
-            top_10_smallest = df.nsmallest(10, "Filesize in Bytes")[
-                ["Filename", "Filesize in Bytes"]
-            ]
-
-            # Profile File Size Analysis
-            profile_size_summary = (
-                df.groupby("Profile Name")
-                .agg(
-                    {
-                        "Filesize in Bytes": ["mean", "std", "min", "max", "count"],
-                        "Filename": lambda x: [str(f) for f in list(set(x.dropna()))][
-                            :5
-                        ],  # Convert to str, remove NaN, take up to 5 filenames max as str
-                    }
-                )
-                .reset_index()
-            )
-
-            # Flatten column names
-            profile_size_summary.columns = [
-                "Profile Name",
-                "Avg File Size (Bytes)",
-                "Std File Size (Bytes)",
-                "Min File Size (Bytes)",
-                "Max File Size (Bytes)",
-                "Count",
-                "Filenames",
-            ]
-
-            # Round numerical columns
-            profile_size_summary["Avg File Size (Bytes)"] = profile_size_summary[
-                "Avg File Size (Bytes)"
-            ].round(2)
-            profile_size_summary["Std File Size (Bytes)"] = profile_size_summary[
-                "Std File Size (Bytes)"
-            ].round(2)
-
-            suggested_limit_avg = (
-                avg_size * 1.5
-            )  # Suggested file size limit (average size + 50% buffer)
-            suggested_limit_max = (
-                max_size * 1.5
-            )  # Suggested file size limit (max size + 50% buffer)
-
-            # Summary Tab Content
-            summary_text.append(f"<h2>Summary Statistics</h2>")
-            summary_text.append(
-                f"<ul><li><b>Einzigartige Dateien insgesamt:</b> {total_files}</li>"
-            )
-            summary_text.append(
-                f"<li><b>Gesamte Log-Einträge:</b> {total_entries}</li>"
-            )
-            summary_text.append(
-                f"<li><b>Gesamtgröße:</b> {int(total_size)} bytes ({total_size / 1024 / 1024:.2f} MB)</li>"
-            )
-            summary_text.append(
-                f"<li><b>Durchschnittliche Dateigröße:</b> {int(avg_size)} bytes ({avg_size / 1024:.2f} KB)</li>"
-            )
-            summary_text.append(
-                f"<li><b>Größte Datei:</b> {int(max_size)} bytes ({max_size / 1024 / 1024:.2f} MB)</li>"
-            )
-            summary_text.append(
-                f"<li><b>Kleinste Datei:</b> {int(min_size)} bytes ({min_size / 1024:.2f} KB)</li></ul><br>"
-            )
-            summary_text.append(f"<h2>Additional Statistics</h2>")
-            summary_text.append(
-                f"<ul><li><b>Mittlere Dateigröße:</b> {median_size:,} bytes ({median_size / 1024:.2f} KB)</li>"
-            )
-            summary_text.append(
-                f"<li><b>Standardabweichung der Dateigrößen:</b> {std_dev_size:,} bytes ({std_dev_size / 1024:.2f} KB)</li></ul><br>"
-            )
-            summary_text.append("<h2>Top 10 Largest Files:</h2><br>")
-            for _, row in top_10_largest.iterrows():
-                summary_text.append(
-                    f"<p>{row['Filename']}: {row['Filesize in Bytes']:,} bytes</p>"
-                )
-            summary_text.append("<br><h2>Top 10 Smallest Files:</h2><br>")
-            for _, row in top_10_smallest.iterrows():
-                summary_text.append(
-                    f"<p>{row['Filename']}: {row['Filesize in Bytes']:,} bytes</p>"
-                )
-            summary_text.append("<br><h2>Files by Profile Name:</h2><br>")
-            for profile, count in files_by_profile.items():
-                summary_text.append(f"<p>{profile}: {count} files</p>")
-            summary_layout.addWidget(summary_text)
-
-            # Excel export button
-            export_button = QPushButton("Export to Excel")
-            export_button.setObjectName("export_to_excel_summary")
-            export_button.setToolTip("Save the statistics as an Excel file")
-
-            # Excel export function
-            def export_excel():
-                try:
-                    file_path, _ = QFileDialog.getSaveFileName(
-                        self.stats_window,
-                        "Save Excel File",
-                        f"{os.path.basename(csv_path).split(".")[0]}_statistics_{datetime.datetime.now().strftime('%Y-%m-%d')}.xlsx",
-                        "Excel Files (*.xlsx)",
-                    )
-                    if not file_path:
-                        return  # User canceled
-                    with pd.ExcelWriter(file_path, engine="xlsxwriter") as writer:
-                        for sheet_name, df_export in self.statistics_dataframes.items():
-                            df_export.to_excel(
-                                writer, sheet_name=sheet_name, index=False
-                            )
-
-                    QMessageBox.information(
-                        self.stats_window,
-                        "Export Successful",
-                        f"Exported to:\n{file_path}",
-                    )
-                except Exception as e:
-                    QMessageBox.critical(self.stats_window, "Export Failed", str(e))
-
-            export_button.clicked.connect(export_excel)
-            summary_layout.addWidget(export_button)
-
-            # Profile File Size Tab Content
-            profile_size_text.append(f"<h2>Profile File Size Analysis</h2>")
-            profile_size_text.append(
-                f"<p><b>Suggested File Size Limit:</b> {suggested_limit_avg:.2f} bytes "
-                f"({suggested_limit_avg / 1024:.2f} KB) (Average observed size + 50% buffer)</p>"
-            )
-            profile_size_text.append(
-                f"<p><b>Suggested File Size Limit:</b> {suggested_limit_max:.2f} bytes "
-                f"({suggested_limit_max / 1024:.2f} KB) (Maximum observed size + 50% buffer)</p>"
-            )
-            profile_size_text.append(
-                "<br><h3>File Size Statistics by Profile Name</h3>"
-            )
-            profile_size_text.append("<table border='1'>")
-            profile_size_text.append(
-                "<tr>"
-                "<th>Profile Name</th>"
-                "<th>Avg Size (Bytes)</th>"
-                "<th>Std Dev (Bytes)</th>"
-                "<th>Min Size (Bytes)</th>"
-                "<th>Max Size (Bytes)</th>"
-                "<th>Count</th>"
-                "<th>Filenames</th>"
-                "</tr>"
-            )
-            for _, row in profile_size_summary.iterrows():
-                profile_size_text.append("<tr>")
-                profile_size_text.append(f"<td>{row['Profile Name']}</td>")
-                profile_size_text.append(f"<td>{row['Avg File Size (Bytes)']:.2f}</td>")
-                profile_size_text.append(
-                    f"<td>{row['Std File Size (Bytes)'] if not pd.isna(row['Std File Size (Bytes)']) else 'N/A'}</td>"
-                )
-                profile_size_text.append(f"<td>{row['Min File Size (Bytes)']:.2f}</td>")
-                profile_size_text.append(f"<td>{row['Max File Size (Bytes)']:.2f}</td>")
-                profile_size_text.append(f"<td>{row['Count']}</td>")
-                profile_size_text.append(
-                    f"<td>{', '.join(row['Filenames']) if row['Filenames'] else 'None'}</td>"
-                )  # Handle empty lists
-                profile_size_text.append("</tr>")
-            profile_size_text.append("</table>")
-            profile_size_layout.addWidget(profile_size_text)
-
-            # Add tabs to the tab widget
-            self.stats_tab.addTab(summary_tab, "Summary")
-            self.stats_tab.addTab(profile_size_tab, "Per Profile Statistics")
-
-            # Prepare Excel export data
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            export_filename = f"statistics_{timestamp}.xlsx"
-            self.last_export_path = os.path.join(os.getcwd(), export_filename)
-
-            # Filetype extraction
-            df["Filetype"] = df["Filename"].apply(
-                lambda x: str(x).split(".")[-1]
-                if isinstance(x, str) and "." in x
-                else "unknown"
-            )
-            filetypes_df = df["Filetype"].value_counts().head(20).reset_index()
-            filetypes_df.columns = ["Filetype", "File Count"]
-
-            # Add Profile File Size Summary to export
-            profile_size_export_df = profile_size_summary.copy()
-            profile_size_export_df["Filenames"] = profile_size_export_df[
-                "Filenames"
-            ].apply(lambda x: ", ".join(x) if x else "None")  # Handle empty lists
-
-            # Store for export
-            self.statistics_dataframes = {
-                "Per Profile Statistics": profile_size_export_df,
-                "Top Filetypes": filetypes_df,
-            }
-
-            self.stats_window.show()
-
-        except Exception as e:
-            self.summary_output_text.append(
-                f"Error creating statistics visualization: {str(e)}"
-            )
-
-    def summarize_filesize(self):
-        # Clear output
-        self.program_output_window.clear()
-        self.progress_bar.setValue(0)
-        csv_result_path = self.csv_sum_filepath_input.text()
-        try:
-            self.summary_output_text.append(
-                "Calculating Total Filesize in Bytes... please wait."
-            )
-
-            df = pd.read_csv(csv_result_path)
-            total_filesize = df["Filesize in Bytes"].sum()
-
-            kb = total_filesize / 1024
-            mb = kb / 1024
-            gb = mb / 1024
-
-            summary = (
-                f"Total Filesize of all processed files:\n"
-                f"In Bytes = {total_filesize:,}\n"
-                f"In KB = {kb:,.2f}\n"
-                f"In MB = {mb:,.2f}\n"
-                f"In GB = {gb:,.2f}"
-            )
-
-            self.summary_output_text.clear()
-            self.summary_output_text.append(summary)
-
-            # Preview first few rows
-            # preview = df.head().to_string(index=False)
-            # self.summary_output_text.append("\nCSV Preview (First 5 Rows):\n" + preview)
-
-            self.show_more_statistics.setHidden(
-                False
-            )  # Show the button after summarization
-
-        except FileNotFoundError:
-            self.summary_output_text.append("No such file or directory.")
-        except Exception as e:
-            self.summary_output_text.append(f"Error processing CSV: {str(e)}")
-
-    # END ======= Main Methods of Program ======== END #
-
-    # START ====== LobsterWorker Class Methods ====== START #
+    #  Main method to search log files and write data to csv file
     def start_processing(self):
         log_filepath = self.log_filepath_input.text().strip()
         output_csv = self.csv_result_input.text()
@@ -1067,7 +965,7 @@ class LogSearcherGUI(QMainWindow):
                 self.start_button.setEnabled(False)
                 self.cancel_button.setEnabled(True)
                 self.progress_bar.setValue(0)
-                self.worker = LogSearcherWorker(log_filepath, output_csv)
+                self.worker = GenericWorker("write_log_data_to_csv",log_filepath, output_csv)
                 self.worker.output_window.connect(self.update_progress)
                 self.worker.status.connect(self.update_status)
                 self.worker.finished.connect(self.processing_finished)
@@ -1077,34 +975,6 @@ class LogSearcherGUI(QMainWindow):
                 self.program_output_window.append(
                     "No log files found in the selected folder."
                 )
-
-    def cancel_processing(self):
-        if hasattr(self, "worker"):
-            self.worker.cancel_requested.emit()
-            self.cancel_button.setEnabled(False)
-            self.start_button.setEnabled(True)
-            self.progress_bar.setValue(0)
-            self.program_output_window.setText("Canceling operation please wait...")
-            self.status_bar.showMessage("")
-
-    def update_progress(self, message):
-        self.program_output_window.append(message)
-        self.program_output_window.ensureCursorVisible()
-
-    def update_status(self, message):
-        self.status_bar.showMessage(message)
-
-    def update_progress_bar(self, value):
-        self.progress_bar.setValue(value)
-
-    def processing_finished(self, message):
-        self.program_output_window.append(message)
-        self.status_bar.showMessage("Processing complete!", 5000)
-        self.start_button.setEnabled(True)
-        self.cancel_button.setEnabled(False)
-        self.progress_bar.setValue(100)
-
-    # END ====== LobsterWorker Class Methods ====== END #
 
     def open_logs_folder(self, path):
         self.log_filepath_input.setText(path)
@@ -1138,7 +1008,6 @@ Output CSV Headers:
 | Time | Job Number | Profile Name | Filename | Filesize in Bytes
 
 Features:
-- Multi-file processing
 - Progress tracking
 - Filesize summarization
 - Recent folders history"""
@@ -1176,6 +1045,51 @@ Features:
                 self.status_bar.clearMessage()
         except (TypeError, FileNotFoundError):
             self.status_bar.clearMessage()
+
+    # ====== Slots for the Signals ====== #
+    
+    def write_to_output_window(self, message):
+        self.program_output_window.setText(message)
+        
+    def clear_output_window(self):
+        self.program_output_window.clear()
+
+    def messagebox_popup_info(self, title, message):
+        QMessageBox.information(self, title, message)
+
+    def messagebox_popup_warn(self, title, message):
+        QMessageBox.warning(self, title, message)
+
+    def messagebox_popup_crit(self, title, message):
+        QMessageBox.critical(self, title, message)
+        
+    def cancel_processing(self):
+        if hasattr(self, "worker"):
+            self.worker.cancel_requested.emit()
+            self.cancel_button.setEnabled(False)
+            self.start_button.setEnabled(True)
+            self.progress_bar.setValue(0)
+            self.program_output_window.setText("Canceling operation please wait...")
+            self.status_bar.showMessage("")
+
+    def update_progress(self, message):
+        self.program_output_window.append(message)
+        self.program_output_window.ensureCursorVisible()
+
+    def update_status(self, message):
+        self.status_bar.showMessage(message)
+
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
+
+    def processing_finished(self, message):
+        self.program_output_window.append(message)
+        self.status_bar.showMessage("Processing complete!", 5000)
+        self.start_button.setEnabled(True)
+        self.cancel_button.setEnabled(False)
+        self.progress_bar.setValue(100)
+
+    # ====== END Slots for the Signals END ====== #
 
 
 if __name__ == "__main__":
